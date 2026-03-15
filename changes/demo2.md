@@ -5,7 +5,7 @@ Code differences compared to source project.
 ## internal/biz/article.go (+69 -5)
 
 ```diff
-@@ -4,10 +4,16 @@
+@@ -4,11 +4,17 @@
  	"context"
  
  	"github.com/brianvoe/gofakeit/v7"
@@ -18,11 +18,12 @@ Code differences compared to source project.
  	"github.com/yylego/kratos-examples/demo2kratos/internal/data"
 +	"github.com/yylego/kratos-examples/demo2kratos/internal/pkg/models"
 +	"github.com/yylego/kratos-gorm/gormkratos"
+ 	"github.com/yylego/must"
 +	"gorm.io/gorm"
  )
  
  type Article struct {
-@@ -19,11 +25,18 @@
+@@ -20,11 +26,18 @@
  
  type ArticleUsecase struct {
  	data *data.Data
@@ -42,7 +43,7 @@ Code differences compared to source project.
  }
  
  func (uc *ArticleUsecase) CreateArticle(ctx context.Context, a *Article) (*Article, *ebzkratos.Ebz) {
-@@ -31,6 +44,43 @@
+@@ -34,6 +47,43 @@
  	if err := gofakeit.Struct(&res); err != nil {
  		return nil, ebzkratos.New(pb.ErrorArticleCreateFailure("fake: %v", err))
  	}
@@ -86,10 +87,10 @@ Code differences compared to source project.
  	return &res, nil
  }
  
-@@ -47,11 +97,25 @@
- }
- 
+@@ -57,11 +107,25 @@
  func (uc *ArticleUsecase) GetArticle(ctx context.Context, id int64) (*Article, *ebzkratos.Ebz) {
+ 	must.True(id > 0)
+ 
 -	var res Article
 -	if err := gofakeit.Struct(&res); err != nil {
 -		return nil, ebzkratos.New(pb.ErrorServerError("fake: %v", err))

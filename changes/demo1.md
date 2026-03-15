@@ -5,7 +5,7 @@ Code differences compared to source project.
 ## internal/biz/student.go (+67 -5)
 
 ```diff
-@@ -4,10 +4,16 @@
+@@ -4,11 +4,17 @@
  	"context"
  
  	"github.com/brianvoe/gofakeit/v7"
@@ -18,11 +18,12 @@ Code differences compared to source project.
  	"github.com/yylego/kratos-examples/demo1kratos/internal/data"
 +	"github.com/yylego/kratos-examples/demo1kratos/internal/pkg/models"
 +	"github.com/yylego/kratos-gorm/gormkratos"
+ 	"github.com/yylego/must"
 +	"gorm.io/gorm"
  )
  
  type Student struct {
-@@ -19,11 +25,18 @@
+@@ -20,11 +26,18 @@
  
  type StudentUsecase struct {
  	data *data.Data
@@ -42,7 +43,7 @@ Code differences compared to source project.
  }
  
  func (uc *StudentUsecase) CreateStudent(ctx context.Context, s *Student) (*Student, *ebzkratos.Ebz) {
-@@ -31,6 +44,42 @@
+@@ -34,6 +47,42 @@
  	if err := gofakeit.Struct(&res); err != nil {
  		return nil, ebzkratos.New(pb.ErrorStudentCreateFailure("fake: %v", err))
  	}
@@ -85,10 +86,10 @@ Code differences compared to source project.
  	return &res, nil
  }
  
-@@ -47,11 +96,24 @@
- }
- 
+@@ -57,11 +106,24 @@
  func (uc *StudentUsecase) GetStudent(ctx context.Context, id int64) (*Student, *ebzkratos.Ebz) {
+ 	must.True(id > 0)
+ 
 -	var res Student
 -	if err := gofakeit.Struct(&res); err != nil {
 -		return nil, ebzkratos.New(pb.ErrorServerError("fake: %v", err))

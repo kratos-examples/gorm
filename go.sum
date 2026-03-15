@@ -20,10 +20,10 @@ github.com/yylego/formatgo v0.0.0 h1:P8sttCVb+cT6+B0UfjC1Bg80GxCFm56ONx4hnVBwMfk
 github.com/yylego/formatgo v0.0.0/go.mod h1:GplYsWVp1atmoWajHL3jRJghU01y7XZgQ686hcljgYo=
 github.com/yylego/kratos-compare v0.0.5 h1:/TiE+c7mS4ifn+FSKzz63HiAyxhOjC6dra5eEBLNFig=
 github.com/yylego/kratos-compare v0.0.5/go.mod h1:NFTWBrXDU0HWx7VFNp5n1trL/YK2zE8XDLE5oyE2OU4=
-github.com/yylego/kratos-examples/demo1kratos v0.0.1 h1:QC7PzUpiNCB0Yh152yV3qu51TOuBENDay6zz8OCpTLk=
-github.com/yylego/kratos-examples/demo1kratos v0.0.1/go.mod h1:rtWq/4jAd1pYhIRd01v4oKFTU8vvWOWJcpP1gemaW7I=
-github.com/yylego/kratos-examples/demo2kratos v0.0.1 h1:We3pEnRea+1wymCLfmdOMnlskaYnc5V7HSBk7bKFYwM=
-github.com/yylego/kratos-examples/demo2kratos v0.0.1/go.mod h1:xkskHJNojASNqYjioPgkeqR4PbvihIF0IOEG6QGUTYg=
+github.com/yylego/kratos-examples/demo1kratos v0.0.2 h1:lv+5f7hYAWYMrdsuOaOUWNi+Y2RIxS67Cav2tGWLOzo=
+github.com/yylego/kratos-examples/demo1kratos v0.0.2/go.mod h1:rtWq/4jAd1pYhIRd01v4oKFTU8vvWOWJcpP1gemaW7I=
+github.com/yylego/kratos-examples/demo2kratos v0.0.2 h1:ozsAi4E8XN9q8tIvf9os636RLAeP2uyPybD3qNt/IVI=
+github.com/yylego/kratos-examples/demo2kratos v0.0.2/go.mod h1:xkskHJNojASNqYjioPgkeqR4PbvihIF0IOEG6QGUTYg=
 github.com/yylego/must v0.0.0 h1:x2KPl61oxeLslgK3AH3nBQiGYic/MIb8mj6TOnVsalE=
 github.com/yylego/must v0.0.0/go.mod h1:9tdcRG+PZ9ah8bMSjxu+/4OEWtGdINeKdmik1WNhsYw=
 github.com/yylego/mutexmap v0.0.0 h1:gnJEBJoYP/3XyXfespDimm2I8UUv+UovbCZ0GYZnYkc=

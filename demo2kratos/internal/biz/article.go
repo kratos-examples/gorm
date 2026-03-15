@@ -13,6 +13,7 @@ import (
 	"github.com/yylego/kratos-examples/demo2kratos/internal/data"
 	"github.com/yylego/kratos-examples/demo2kratos/internal/pkg/models"
 	"github.com/yylego/kratos-gorm/gormkratos"
+	"github.com/yylego/must"
 	"gorm.io/gorm"
 )
 
@@ -40,6 +41,8 @@ func NewArticleUsecase(data *data.Data, logger log.Logger) *ArticleUsecase {
 }
 
 func (uc *ArticleUsecase) CreateArticle(ctx context.Context, a *Article) (*Article, *ebzkratos.Ebz) {
+	must.Nice(a.Title)
+
 	var res Article
 	if err := gofakeit.Struct(&res); err != nil {
 		return nil, ebzkratos.New(pb.ErrorArticleCreateFailure("fake: %v", err))
@@ -85,6 +88,9 @@ func (uc *ArticleUsecase) CreateArticle(ctx context.Context, a *Article) (*Artic
 }
 
 func (uc *ArticleUsecase) UpdateArticle(ctx context.Context, a *Article) (*Article, *ebzkratos.Ebz) {
+	must.True(a.ID > 0)
+	must.Nice(a.Title)
+
 	var res Article
 	if err := gofakeit.Struct(&res); err != nil {
 		return nil, ebzkratos.New(pb.ErrorServerError("fake: %v", err))
@@ -93,10 +99,14 @@ func (uc *ArticleUsecase) UpdateArticle(ctx context.Context, a *Article) (*Artic
 }
 
 func (uc *ArticleUsecase) DeleteArticle(ctx context.Context, id int64) *ebzkratos.Ebz {
+	must.True(id > 0)
+
 	return nil
 }
 
 func (uc *ArticleUsecase) GetArticle(ctx context.Context, id int64) (*Article, *ebzkratos.Ebz) {
+	must.True(id > 0)
+
 	db := uc.data.DB()
 
 	// Use gormrepo with type-safe column reference

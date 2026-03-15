@@ -23,7 +23,7 @@
 
 **kratos-examples** 是使用 [Go-Kratos](https://go-kratos.dev) 框架构建微服务的最佳实践参考实现。它的作用是：
 
-- 🎯 **基础项目** - kratos-orz 生态系统中 15+ 专用演示项目的基础模板
+- 🎯 **基础项目** - kratos-orz 生态系统中 20+ 专用演示项目的基础模板
 - 🛠️ **工具链集成示例** - 展示 kratos-orz 开发工具的实践应用
 - 📚 **学习资源** - 完整的微服务架构，遵循 Kratos 规范
 - ⚡ **快速开发** - 通过 make orz 等魔法命令实现 proto 和代码自动同步
@@ -38,6 +38,34 @@
 - 优秀的文档和活跃的生态
 
 **kratos-examples 在这个坚实的基础上**，添加了增强的工具链和自动化能力，简化开发工作流程。
+
+## 示例项目
+
+以下项目均基于 kratos-examples 进行 fork，分别展示不同的功能特性和集成方案，涵盖认证、配置、定时任务、数据库、日志、链路追踪、前端集成等多个方面：
+
+|    演示     |                      仓库                      |
+| :---------: | :--------------------------------------------: |
+|     ast     |     https://github.com/kratos-examples/ast     |
+| custom-auth | https://github.com/kratos-examples/custom-auth |
+| static-auth | https://github.com/kratos-examples/static-auth |
+|   config    |   https://github.com/kratos-examples/config    |
+|    cron     |    https://github.com/kratos-examples/cron     |
+|     ebz     |     https://github.com/kratos-examples/ebz     |
+|    cobra    |    https://github.com/kratos-examples/cobra    |
+|    gorm     |    https://github.com/kratos-examples/gorm     |
+|    cors     |    https://github.com/kratos-examples/cors     |
+|    i18n     |    https://github.com/kratos-examples/i18n     |
+|    nacos    |    https://github.com/kratos-examples/nacos    |
+|   swaggo    |   https://github.com/kratos-examples/swaggo    |
+|    trace    |    https://github.com/kratos-examples/trace    |
+|    test     |    https://github.com/kratos-examples/test     |
+|    vue3     |    https://github.com/kratos-examples/vue3     |
+|    wire     |    https://github.com/kratos-examples/wire     |
+|     zap     |     https://github.com/kratos-examples/zap     |
+|    zapzh    |    https://github.com/kratos-examples/zapzh    |
+|   migrate   |   https://github.com/kratos-examples/migrate   |
+|    ping     |    https://github.com/kratos-examples/ping     |
+| supervisord | https://github.com/kratos-examples/supervisord |
 
 ## 核心功能
 
@@ -83,28 +111,13 @@ make orz
 
 详细工作流程和使用说明请查看 [Makefile](./Makefile)。
 
-## 项目结构
-
-### 演示项目
-
-提供两个演示项目，展示各种功能的使用：
-
-- [demo1kratos](./demo1kratos) - Student CRUD 微服务（Kratos 简单示例）
-- [demo2kratos](./demo2kratos) - Article CRUD 微服务（高级功能和集成）
-
-两个演示都遵循标准的 Kratos 项目结构，采用 proto-first 设计、Wire 依赖注入、gRPC/HTTP 双协议端点。
-
-我们提供 Demo1（基准）和 Demo2（fork）的代码比较，突出显示改动的代码块。
-
-当此项目被 fork 时，你也可以将其与源项目进行比较，查看差异。
-
 ### 代码变更
 
 [changes/](./changes) 包含记录代码差异的 markdown 文件：
 
 - [changes/demo1.md](./changes/demo1.md) - Demo1 相对源项目的变更
 - [changes/demo2.md](./changes/demo2.md) - Demo2 相对源项目的变更
-- [changes/aside.md](changes/aside.md) - 附属模块和兄弟项目
+- [changes/aside.md](./changes/aside.md) - 附属模块和兄弟项目
 
 这些文件通过测试自动生成：
 
@@ -118,31 +131,31 @@ go test -v -run TestGenerateAsideChanges # 生成 aside.md
 
 **在 fork 项目中：** 文件显示代码差异并带语法高亮，简单直观地在 GitHub 上查看定制化的改动。
 
-## Fork 项目列表
+## 项目结构
 
-|    演示     |                      仓库                      |
-| :---------: | :--------------------------------------------: |
-|     ast     |     https://github.com/kratos-examples/ast     |
-| custom-auth | https://github.com/kratos-examples/custom-auth |
-| static-auth | https://github.com/kratos-examples/static-auth |
-|   config    |   https://github.com/kratos-examples/config    |
-|    cron     |    https://github.com/kratos-examples/cron     |
-|     ebz     |     https://github.com/kratos-examples/ebz     |
-|    cobra    |    https://github.com/kratos-examples/cobra    |
-|    gorm     |    https://github.com/kratos-examples/gorm     |
-|    cors     |    https://github.com/kratos-examples/cors     |
-|    i18n     |    https://github.com/kratos-examples/i18n     |
-|    nacos    |    https://github.com/kratos-examples/nacos    |
-|   swaggo    |   https://github.com/kratos-examples/swaggo    |
-|    trace    |    https://github.com/kratos-examples/trace    |
-|    test     |    https://github.com/kratos-examples/test     |
-|    vue3     |    https://github.com/kratos-examples/vue3     |
-|    wire     |    https://github.com/kratos-examples/wire     |
-|     zap     |     https://github.com/kratos-examples/zap     |
-|    zapzh    |    https://github.com/kratos-examples/zapzh    |
-|   migrate   |   https://github.com/kratos-examples/migrate   |
-|    ping     |    https://github.com/kratos-examples/ping     |
-| supervisord | https://github.com/kratos-examples/supervisord |
+### 内置演示
+
+提供两个内置演示项目，展示各种功能的使用：
+
+- [demo1kratos](./demo1kratos) - Student CRUD 微服务（Kratos 简单示例）
+- [demo2kratos](./demo2kratos) - Article CRUD 微服务（高级功能和集成）
+
+两个演示都遵循标准的 Kratos 项目结构，采用 proto-first 设计、Wire 依赖注入、gRPC/HTTP 双协议端点。
+
+### 参数校验
+
+项目演示了双层校验模式：
+
+- **Service 层** - 返回 `ErrorBadParam`（HTTP 400）提示客户端输入无效，给予可操作的反馈
+- **Biz 层** - 使用 `must` 断言（失败时 panic）作为安全兜底。由于 Service 层已经做过校验，Biz 层只是冗余检查，因此采用简单的断言而非返回详细错误。这也确保了 Biz 模块自身的安全性——即使其他调用方在新的场景中复用该模块时忘记校验参数，断言也能及时捕获问题。相比在代码中到处散布防御性检查，在入口处用断言直接拒绝非法参数，让后续的业务逻辑保持简洁和确定性
+
+### 数据层
+
+源项目使用 `gofakeit` 生成模拟数据，专注于框架结构和工具链集成的展示。Fork 项目（如 [gorm](https://github.com/kratos-examples/gorm)）将模拟数据替换为基于 GORM + SQLite 的真实数据库操作，演示生产级别的 CRUD 模式和 `gormrepo` 的使用。
+
+我们提供 Demo1（基准）和 Demo2（fork）的代码比较，突出显示改动的代码块。
+
+当此项目被 fork 时，你也可以将其与源项目进行比较，查看差异。
 
 <!-- TEMPLATE (ZH) BEGIN: STANDARD PROJECT FOOTER -->
 <!-- VERSION 2025-11-25 03:52:28.131064 +0000 UTC -->
