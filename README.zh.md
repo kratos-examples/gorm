@@ -23,7 +23,7 @@
 
 **kratos-examples** 是使用 [Go-Kratos](https://go-kratos.dev) 框架构建微服务的最佳实践参考实现。它的作用是：
 
-- 🎯 **基础项目** - kratos-orz 生态系统中 15+ 专用演示项目的基础模板
+- 🎯 **基础项目** - kratos-orz 生态系统中 20+ 专用演示项目的基础模板
 - 🛠️ **工具链集成示例** - 展示 kratos-orz 开发工具的实践应用
 - 📚 **学习资源** - 完整的微服务架构，遵循 Kratos 规范
 - ⚡ **快速开发** - 通过 make orz 等魔法命令实现 proto 和代码自动同步
@@ -93,6 +93,17 @@ make orz
 - [demo2kratos](./demo2kratos) - Article CRUD 微服务（高级功能和集成）
 
 两个演示都遵循标准的 Kratos 项目结构，采用 proto-first 设计、Wire 依赖注入、gRPC/HTTP 双协议端点。
+
+### 参数校验
+
+项目演示了双层校验模式：
+
+- **Service 层** - 返回 `ErrorBadParam`（HTTP 400）提示客户端输入无效，给予可操作的反馈
+- **Biz 层** - 使用 `must` 断言作为安全兜底，捕获绕过 Service 层校验的编程错误
+
+### 数据层
+
+源项目使用 `gofakeit` 生成模拟数据，专注于框架结构和工具链集成的展示。Fork 项目（如 [gorm](https://github.com/kratos-examples/gorm)）将模拟数据替换为基于 GORM + SQLite 的真实数据库操作，演示生产级别的 CRUD 模式和 `gormrepo` 的使用。
 
 我们提供 Demo1（基准）和 Demo2（fork）的代码比较，突出显示改动的代码块。
 

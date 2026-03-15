@@ -23,7 +23,7 @@ Demo projects built with the Go-Kratos framework.
 
 **kratos-examples** is a reference implementation demonstrating best practices when building microservices with the [Go-Kratos](https://go-kratos.dev) framework. It serves as:
 
-- 🎯 **Foundation Project** - The upstream template of 15+ specialized demo projects in the kratos-orz ecosystem
+- 🎯 **Foundation Project** - The upstream template of 20+ specialized demo projects in the kratos-orz ecosystem
 - 🛠️ **Toolchain Integration Example** - Showcasing kratos-orz development tools in action
 - 📚 **Learning Resource** - Complete microservice structure following Kratos conventions
 - ⚡ **Fast Development** - Auto-sync proto and code through magic commands like make orz
@@ -93,6 +93,17 @@ Provides two demos to showcase the usage of various features:
 - [demo2kratos](./demo2kratos) - Article CRUD microservice (advanced features and integrations)
 
 Both demos follow standard Kratos project structure with proto-first design, Wire DI, and gRPC/HTTP endpoints.
+
+### Parameter Validation
+
+The project demonstrates a two-tier validation pattern:
+
+- **Service Layer** - Returns `ErrorBadParam` (HTTP 400) for invalid input, giving clients actionable feedback
+- **Biz Layer** - Uses `must` assertions as a safety net, catching programming mistakes that bypass service validation
+
+### Data Layer
+
+The source project uses `gofakeit` to generate mock data, keeping the focus on framework structure and toolchain integration. Fork projects (such as [gorm](https://github.com/kratos-examples/gorm)) replace mock data with real database operations using GORM + SQLite, demonstrating production-grade CRUD patterns with `gormrepo`.
 
 We provide a code comparison between Demo1 (base) and Demo2 (fork), highlighting the changed code blocks.
 
