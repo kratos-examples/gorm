@@ -2,15 +2,17 @@
 
 Code differences compared to source project.
 
-## internal/biz/student.go (+67 -5)
+## internal/biz/student.go (+108 -16)
 
 ```diff
-@@ -4,11 +4,17 @@
+@@ -3,12 +3,18 @@
+ import (
  	"context"
  
- 	"github.com/brianvoe/gofakeit/v7"
+-	"github.com/brianvoe/gofakeit/v7"
 +	"github.com/go-kratos/kratos/v2/errors"
  	"github.com/go-kratos/kratos/v2/log"
++	"github.com/yylego/gormcnm"
 +	"github.com/yylego/gormrepo"
 +	"github.com/yylego/gormrepo/gormclass"
  	"github.com/yylego/kratos-ebz/ebzkratos"
@@ -23,7 +25,7 @@ Code differences compared to source project.
  )
  
  type Student struct {
-@@ -20,11 +26,18 @@
+@@ -20,52 +26,138 @@
  
  type StudentUsecase struct {
  	data *data.Data
@@ -43,12 +45,14 @@ Code differences compared to source project.
  }
  
  func (uc *StudentUsecase) CreateStudent(ctx context.Context, s *Student) (*Student, *ebzkratos.Ebz) {
-@@ -34,6 +47,42 @@
- 	if err := gofakeit.Struct(&res); err != nil {
- 		return nil, ebzkratos.New(pb.ErrorStudentCreateFailure("fake: %v", err))
- 	}
-+
+ 	must.Nice(s.Name)
+ 
+-	var res Student
+-	if err := gofakeit.Struct(&res); err != nil {
+-		return nil, ebzkratos.New(pb.ErrorStudentCreateFailure("fake: %v", err))
 +	db := uc.data.DB()
++
++	var student *models.Student
 +
 +	// This demonstrates how to handle database transactions in Kratos framework
 +	//
@@ -70,10 +74,10 @@ Code differences compared to source project.
 +	//       return WrapTxError(err)  // Database commit failed
 +	//   }
 +	if erk, err := gormkratos.Transaction(ctx, db, func(db *gorm.DB) *errors.Error {
-+		record := &models.Student{
-+			Name: res.Name,
++		student = &models.Student{
++			Name: s.Name,
 +		}
-+		if err := uc.repo.With(ctx, db).Create(record); err != nil {
++		if err := uc.repo.With(ctx, db).Create(student); err != nil {
 +			return errors.New(500, "DB_ERROR", err.Error())
 +		}
 +		return nil
@@ -82,11 +86,50 @@ Code differences compared to source project.
 +			return nil, ebzkratos.New(erk)
 +		}
 +		return nil, ebzkratos.New(pb.ErrorServerError("tx: %v", err))
-+	}
- 	return &res, nil
+ 	}
+-	return &res, nil
++	return &Student{
++		ID:   int64(student.ID),
++		Name: student.Name,
++	}, nil
  }
  
-@@ -57,11 +106,24 @@
+ func (uc *StudentUsecase) UpdateStudent(ctx context.Context, s *Student) (*Student, *ebzkratos.Ebz) {
+ 	must.True(s.ID > 0)
+ 	must.Nice(s.Name)
+ 
+-	var res Student
+-	if err := gofakeit.Struct(&res); err != nil {
+-		return nil, ebzkratos.New(pb.ErrorServerError("fake: %v", err))
++	db := uc.data.DB()
++
++	// Use gormrepo UpdatesM with type-safe column value map
++	if err := uc.repo.With(ctx, db).UpdatesM(func(db *gorm.DB, cls *models.StudentColumns) *gorm.DB {
++		return db.Where(cls.ID.Eq(uint(s.ID)))
++	}, func(cls *models.StudentColumns) gormcnm.ColumnValueMap {
++		return cls.Kw(cls.Name.Kv(s.Name))
++	}); err != nil {
++		return nil, ebzkratos.New(pb.ErrorServerError("update: %v", err))
+ 	}
+-	return &res, nil
++
++	return s, nil
+ }
+ 
+ func (uc *StudentUsecase) DeleteStudent(ctx context.Context, id int64) *ebzkratos.Ebz {
+ 	must.True(id > 0)
+ 
++	db := uc.data.DB()
++
++	// Use gormrepo DeleteW with type-safe where condition
++	if err := uc.repo.With(ctx, db).DeleteW(func(db *gorm.DB, cls *models.StudentColumns) *gorm.DB {
++		return db.Where(cls.ID.Eq(uint(id)))
++	}); err != nil {
++		return ebzkratos.New(pb.ErrorServerError("delete: %v", err))
++	}
+ 	return nil
+ }
+ 
  func (uc *StudentUsecase) GetStudent(ctx context.Context, id int64) (*Student, *ebzkratos.Ebz) {
  	must.True(id > 0)
  
@@ -97,7 +140,7 @@ Code differences compared to source project.
 +
 +	// Use gormrepo with type-safe column reference
 +	// The cls param provides compile-time safe column access
-+	record, erb := uc.repo.With(ctx, db).FirstE(func(db *gorm.DB, cls *models.StudentColumns) *gorm.DB {
++	student, erb := uc.repo.With(ctx, db).FirstE(func(db *gorm.DB, cls *models.StudentColumns) *gorm.DB {
 +		return db.Where(cls.ID.Eq(uint(id)))
 +	})
 +	if erb != nil {
@@ -109,12 +152,33 @@ Code differences compared to source project.
 -	return &res, nil
 +
 +	return &Student{
-+		ID:   int64(record.ID),
-+		Name: record.Name,
++		ID:   int64(student.ID),
++		Name: student.Name,
 +	}, nil
  }
  
  func (uc *StudentUsecase) ListStudents(ctx context.Context, page int32, pageSize int32) ([]*Student, int32, *ebzkratos.Ebz) {
+-	var items []*Student
+-	gofakeit.Slice(&items)
++	db := uc.data.DB()
++
++	// Use gormrepo Find to get all records from database
++	students, err := uc.repo.With(ctx, db).Find(func(db *gorm.DB, cls *models.StudentColumns) *gorm.DB {
++		return db.Order(cls.ID.Ob("DESC").Ox())
++	})
++	if err != nil {
++		return nil, 0, ebzkratos.New(pb.ErrorServerError("list: %v", err))
++	}
++
++	items := make([]*Student, 0, len(students))
++	for _, v := range students {
++		items = append(items, &Student{
++			ID:   int64(v.ID),
++			Name: v.Name,
++		})
++	}
+ 	return items, int32(len(items)), nil
+ }
 ```
 
 ## internal/data/data.go (+14 -3)

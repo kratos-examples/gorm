@@ -3,9 +3,9 @@ package biz
 import (
 	"context"
 
-	"github.com/brianvoe/gofakeit/v7"
 	"github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
+	"github.com/yylego/gormcnm"
 	"github.com/yylego/gormrepo"
 	"github.com/yylego/gormrepo/gormclass"
 	"github.com/yylego/kratos-ebz/ebzkratos"
@@ -43,12 +43,9 @@ func NewArticleUsecase(data *data.Data, logger log.Logger) *ArticleUsecase {
 func (uc *ArticleUsecase) CreateArticle(ctx context.Context, a *Article) (*Article, *ebzkratos.Ebz) {
 	must.Nice(a.Title)
 
-	var res Article
-	if err := gofakeit.Struct(&res); err != nil {
-		return nil, ebzkratos.New(pb.ErrorArticleCreateFailure("fake: %v", err))
-	}
-
 	db := uc.data.DB()
+
+	var article *models.Article
 
 	// This demonstrates how to handle database transactions in Kratos framework
 	//
@@ -70,11 +67,11 @@ func (uc *ArticleUsecase) CreateArticle(ctx context.Context, a *Article) (*Artic
 	//       return WrapTxError(err)  // Database commit failed
 	//   }
 	if erk, err := gormkratos.Transaction(ctx, db, func(db *gorm.DB) *errors.Error {
-		record := &models.Article{
-			Title:   res.Title,
-			Content: res.Content,
+		article = &models.Article{
+			Title:   a.Title,
+			Content: a.Content,
 		}
-		if err := uc.repo.With(ctx, db).Create(record); err != nil {
+		if err := uc.repo.With(ctx, db).Create(article); err != nil {
 			return errors.New(500, "DB_ERROR", err.Error())
 		}
 		return nil
@@ -84,23 +81,42 @@ func (uc *ArticleUsecase) CreateArticle(ctx context.Context, a *Article) (*Artic
 		}
 		return nil, ebzkratos.New(pb.ErrorServerError("tx: %v", err))
 	}
-	return &res, nil
+	return &Article{
+		ID:      int64(article.ID),
+		Title:   article.Title,
+		Content: article.Content,
+	}, nil
 }
 
 func (uc *ArticleUsecase) UpdateArticle(ctx context.Context, a *Article) (*Article, *ebzkratos.Ebz) {
 	must.True(a.ID > 0)
 	must.Nice(a.Title)
 
-	var res Article
-	if err := gofakeit.Struct(&res); err != nil {
-		return nil, ebzkratos.New(pb.ErrorServerError("fake: %v", err))
+	db := uc.data.DB()
+
+	// Use gormrepo UpdatesM with type-safe column value map
+	if err := uc.repo.With(ctx, db).UpdatesM(func(db *gorm.DB, cls *models.ArticleColumns) *gorm.DB {
+		return db.Where(cls.ID.Eq(uint(a.ID)))
+	}, func(cls *models.ArticleColumns) gormcnm.ColumnValueMap {
+		return cls.Kw(cls.Title.Kv(a.Title)).Kw(cls.Content.Kv(a.Content))
+	}); err != nil {
+		return nil, ebzkratos.New(pb.ErrorServerError("update: %v", err))
 	}
-	return &res, nil
+
+	return a, nil
 }
 
 func (uc *ArticleUsecase) DeleteArticle(ctx context.Context, id int64) *ebzkratos.Ebz {
 	must.True(id > 0)
 
+	db := uc.data.DB()
+
+	// Use gormrepo DeleteW with type-safe where condition
+	if err := uc.repo.With(ctx, db).DeleteW(func(db *gorm.DB, cls *models.ArticleColumns) *gorm.DB {
+		return db.Where(cls.ID.Eq(uint(id)))
+	}); err != nil {
+		return ebzkratos.New(pb.ErrorServerError("delete: %v", err))
+	}
 	return nil
 }
 
@@ -111,7 +127,7 @@ func (uc *ArticleUsecase) GetArticle(ctx context.Context, id int64) (*Article, *
 
 	// Use gormrepo with type-safe column reference
 	// The cls param provides compile-time safe column access
-	record, erb := uc.repo.With(ctx, db).FirstE(func(db *gorm.DB, cls *models.ArticleColumns) *gorm.DB {
+	article, erb := uc.repo.With(ctx, db).FirstE(func(db *gorm.DB, cls *models.ArticleColumns) *gorm.DB {
 		return db.Where(cls.ID.Eq(uint(id)))
 	})
 	if erb != nil {
@@ -122,14 +138,30 @@ func (uc *ArticleUsecase) GetArticle(ctx context.Context, id int64) (*Article, *
 	}
 
 	return &Article{
-		ID:      int64(record.ID),
-		Title:   record.Title,
-		Content: record.Content,
+		ID:      int64(article.ID),
+		Title:   article.Title,
+		Content: article.Content,
 	}, nil
 }
 
 func (uc *ArticleUsecase) ListArticles(ctx context.Context, page int32, pageSize int32) ([]*Article, int32, *ebzkratos.Ebz) {
-	var items []*Article
-	gofakeit.Slice(&items)
+	db := uc.data.DB()
+
+	// Use gormrepo Find to get all records from database
+	articles, err := uc.repo.With(ctx, db).Find(func(db *gorm.DB, cls *models.ArticleColumns) *gorm.DB {
+		return db.Order(cls.ID.Ob("DESC").Ox())
+	})
+	if err != nil {
+		return nil, 0, ebzkratos.New(pb.ErrorServerError("list: %v", err))
+	}
+
+	items := make([]*Article, 0, len(articles))
+	for _, v := range articles {
+		items = append(items, &Article{
+			ID:      int64(v.ID),
+			Title:   v.Title,
+			Content: v.Content,
+		})
+	}
 	return items, int32(len(items)), nil
 }

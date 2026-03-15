@@ -3,7 +3,6 @@ module github.com/yylego/kratos-examples/demo1kratos
 go 1.25.0
 
 require (
-	github.com/brianvoe/gofakeit/v7 v7.14.1
 	github.com/go-kratos/kratos/v2 v2.9.2
 	github.com/google/wire v0.7.0
 	github.com/yylego/done v0.0.0
