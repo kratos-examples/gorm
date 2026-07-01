@@ -7,5 +7,5 @@ server:
     timeout: 1s
 data:
   database:
-    driver: sqlite3
-    source: file:db-E301BDE1-84F2-4C39-A75D-90648C2F241B?mode=memory&cache=shared
+    driver: postgres
+    source: host=localhost port=5432 user=postgres password=123 dbname=kratos_examples_db sslmode=disable

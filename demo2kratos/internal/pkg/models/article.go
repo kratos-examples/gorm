@@ -4,8 +4,9 @@ import "gorm.io/gorm"
 
 type Article struct {
 	gorm.Model
-	Title   string `gorm:"type:varchar(255)"`
-	Content string `gorm:"type:text"`
+	Title     string `gorm:"type:varchar(255)"`
+	Content   string `gorm:"type:text"`
+	StudentID int64  `gorm:"index"`
 }
 
 func (*Article) TableName() string {

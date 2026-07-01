@@ -53,13 +53,16 @@ The following projects are forked from kratos-examples, each demonstrating diffe
 |     ebz     |     https://github.com/kratos-examples/ebz     |
 |    cobra    |    https://github.com/kratos-examples/cobra    |
 |    gorm     |    https://github.com/kratos-examples/gorm     |
+|  gormzhcn   |  https://github.com/kratos-examples/gormzhcn   |
 |    cors     |    https://github.com/kratos-examples/cors     |
 |    i18n     |    https://github.com/kratos-examples/i18n     |
 |    nacos    |    https://github.com/kratos-examples/nacos    |
+| rate-limit  | https://github.com/kratos-examples/rate-limit  |
 |   swaggo    |   https://github.com/kratos-examples/swaggo    |
 |    trace    |    https://github.com/kratos-examples/trace    |
 |    test     |    https://github.com/kratos-examples/test     |
 |    vue3     |    https://github.com/kratos-examples/vue3     |
+|  vue3zhcn   |  https://github.com/kratos-examples/vue3zhcn   |
 |    wire     |    https://github.com/kratos-examples/wire     |
 |     zap     |     https://github.com/kratos-examples/zap     |
 |    zapzh    |    https://github.com/kratos-examples/zapzh    |
@@ -69,17 +72,98 @@ The following projects are forked from kratos-examples, each demonstrating diffe
 
 ## Core Features
 
-### 🚀 kratos-orz Toolchain Integration
+### 🛠️ Recommended Toolchain
 
-Provides kratos-orz toolchain:
+The kratos-orz ecosystem ships focused utilities. The first entries target the Kratos and proto workflow; the rest are shared Go helpers. Set up each one as you need — each command stands on its own, most IDEs show a run button on the block so a click does the setup, and each repo link opens the complete docs.
 
-- **orzkratos-add-proto** - Simplifies adding proto files to the Kratos project
-- **orzkratos-srv-proto** - Auto syncs service implementations with proto definitions
+#### `orzkratos-add-proto`
 
-Setup tools:
+Scaffolds a fresh proto file in the api path, so a new endpoint starts from a prepared skeleton.
+
+Repo: https://github.com/yylego/kratos-orz
 
 ```bash
-make init
+go install github.com/yylego/kratos-orz/cmd/orzkratos-add-proto@latest
+```
+
+#### `orzkratos-srv-proto`
+
+Syncs the service code onto the proto contract: adds method stubs, hides removed methods, and reorders to match.
+
+Repo: https://github.com/yylego/kratos-orz
+
+```bash
+go install github.com/yylego/kratos-orz/cmd/orzkratos-srv-proto@latest
+```
+
+#### `protoc-gen-orzkratos-errors`
+
+Generates Go errors helpers from proto enums, with status codes and nested wrapping.
+
+Repo: https://github.com/yylego/kratos-errgen
+
+```bash
+go install github.com/yylego/kratos-errgen/cmd/protoc-gen-orzkratos-errors@latest
+```
+
+#### `wirekratos`
+
+Runs Wire DI in Kratos workspace mode, with framework-aware markers.
+
+Repo: https://github.com/yylego/kratos-wire
+
+```bash
+go install github.com/yylego/kratos-wire/cmd/wirekratos@latest
+```
+
+#### `clang-format-batch`
+
+Batch-formats proto and cpp sources in one shot.
+
+Repo: https://github.com/yylego/clang-format
+
+```bash
+go install github.com/yylego/clang-format/cmd/clang-format-batch@latest
+```
+
+#### `depbump`
+
+Upgrades module dependencies in a single pass, across the whole workspace if asked.
+
+Repo: https://github.com/yylego/depbump
+
+```bash
+go install github.com/yylego/depbump/cmd/depbump@latest
+```
+
+#### `go-lint`
+
+Wraps golangci-lint with auto-format, runs format plus static checks across modules.
+
+Repo: https://github.com/yylego/go-lint
+
+```bash
+go install github.com/yylego/go-lint/cmd/go-lint@latest
+```
+
+#### `go-commit`
+
+Automates git commits with Go formatting baked in.
+
+Repo: https://github.com/yylego/go-commit
+
+```bash
+go install github.com/yylego/go-commit/cmd/go-commit@latest
+```
+
+#### `tago`
+
+Manages git tags with semantic auto-increment, and handles the path prefix sub-module tags too.
+
+Repo: https://github.com/yylego/tago
+
+```bash
+go install github.com/yylego/tago/cmd/tago@latest
 ```
 
 ### ⚡ Magic Command: `make orz`
@@ -103,13 +187,13 @@ make orz
 3. Service generates `CreateArticle` method stub
 4. Implement the business logic
 
-### 🔀 Fork Project Synchronization
+## Upgrade & Sync Approach
 
-Provides complete automated workflow to sync fork projects with upstream changes.
+This project is a multi-module repo: a root module plus two sub-modules (`demo1kratos`, `demo2kratos`). The root references the sub-modules, so a release runs in two rounds — tag the sub-modules first (with the path prefix, e.g. `demo1kratos/v0.0.X`), then bump the root onto the new sub-module versions and tag the root (`v0.0.X`).
 
-Through `make merge-stepN` series commands, auto handles upstream code merging, conflict resolution, dependencies upgrades, test validation, and more.
+Downstream fork projects each focus on a single feature (trace, gorm, zap, i18n, ...) and sync from this upstream on a recurring cadence: merge upstream main, upgrade dependencies, regenerate code, then test and lint. Forks do not merge back — each one stands as a standalone example, pulling upstream changes to remain aligned with the newest Kratos version.
 
-See [Makefile](./Makefile) with detailed workflow and usage instructions.
+The utilities above map onto each task: `depbump` handles dependencies, `tago` handles tags, `go-lint` handles format and checks. The exact sequence is best driven one step at a time, not scripted, so the flow adapts to each situation.
 
 ### Code Changes
 
@@ -147,15 +231,11 @@ Both demos follow standard Kratos project structure with proto-first design, Wir
 The project demonstrates a two-stage validation pattern:
 
 - **Service Stage** - Returns `ErrorBadParam` (HTTP 400) on invalid input, giving clients actionable feedback
-- **Biz Stage** - Uses `must` assertions (panic on failure) as a safeguard. Since the service stage has done the validation, the biz stage is just a redundant check, so it uses simple assertions instead of returning verbose errors. This also ensures the biz module is self-protected — even if someone invokes it from a new context and forgets to validate inputs, the assertions will catch it. Instead of scattering defensive checks throughout the code, assertions at the entrance make the module refuse to execute on invalid inputs, keeping the downstream logic clean and confident
+- **Biz Stage** - Uses `must` assertions (panic on failure) as a safeguard. Since the service stage has done the validation, the biz stage is just a redundant check, so it uses simple assertions instead of returning verbose errors. This also ensures the biz module is self-protected — even if someone invokes it from a new context and forgets to validate inputs, the assertions catch it. Instead of scattering defensive checks throughout the code, assertions at the entrance make the module refuse to execute on invalid inputs, keeping the downstream logic clean and confident
 
 ### Data Access
 
-The source project uses `gofakeit` to generate mock data, keeping the focus on the framework and its toolchain integration. Fork projects (such as [gorm](https://github.com/kratos-examples/gorm)) use GORM + SQLite database operations, demonstrating production-grade CRUD patterns with `gormrepo`.
-
-We provide a code comparison between Demo1 (base) and Demo2 (fork), highlighting the changed code blocks.
-
-When this project is forked, you can also compare it with the source to see the differences.
+Both demos use a shared PostgreSQL database via GORM.
 
 <!-- TEMPLATE (EN) BEGIN: STANDARD PROJECT FOOTER -->
 <!-- VERSION 2025-11-25 03:52:28.131064 +0000 UTC -->

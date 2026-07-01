@@ -2,16 +2,35 @@
 
 Code differences compared to source project.
 
-## internal/biz/article.go (+112 -16)
+## cmd/demo2kratos/wire_gen.go (+1 -5)
 
 ```diff
-@@ -3,12 +3,18 @@
+@@ -28,11 +28,7 @@
+ 	if err != nil {
+ 		return nil, nil, err
+ 	}
+-	articleUsecase, err := biz.NewArticleUsecase(dataData, logger)
+-	if err != nil {
+-		cleanup()
+-		return nil, nil, err
+-	}
++	articleUsecase := biz.NewArticleUsecase(dataData, logger)
+ 	articleService := service.NewArticleService(articleUsecase)
+ 	grpcServer := server.NewGRPCServer(confServer, articleService, logger)
+ 	httpServer := server.NewHTTPServer(confServer, articleService, logger)
+```
+
+## internal/biz/article.go (+130 -129)
+
+```diff
+@@ -2,195 +2,196 @@
+ 
  import (
  	"context"
+-	"errors"
+ 	"log/slog"
  
--	"github.com/brianvoe/gofakeit/v7"
-+	"github.com/go-kratos/kratos/v2/errors"
- 	"github.com/go-kratos/kratos/v2/log"
++	"github.com/go-kratos/kratos/v3/errors"
 +	"github.com/yylego/gormcnm"
 +	"github.com/yylego/gormrepo"
 +	"github.com/yylego/gormrepo/gormclass"
@@ -21,35 +40,69 @@ Code differences compared to source project.
 +	"github.com/yylego/kratos-examples/demo2kratos/internal/pkg/models"
 +	"github.com/yylego/kratos-gorm/gormkratos"
  	"github.com/yylego/must"
-+	"gorm.io/gorm"
+ 	"gorm.io/gorm"
+-	"gorm.io/gorm/clause"
  )
  
+-// Article is the GORM type mapped to the "articles" table. This service owns
+-// the table; demo1kratos keeps a duplicate of it just to cascade-delete a
+-// student's articles (the two services share one database).
+-//
+-// Article 是映射到 articles 表的 GORM 模型，本服务是这张表的归属方；
+-// demo1kratos 里有一份镜像，仅用于删学生时顺带删文章（两服务共用一个库）
  type Article struct {
-@@ -20,52 +26,142 @@
+-	ID        int64  `gorm:"primaryKey;autoIncrement"`
+-	Title     string `gorm:"size:256;not null"`
+-	Content   string `gorm:"type:text"`
+-	StudentID int64  `gorm:"index"`
++	ID        int64
++	Title     string
++	Content   string
++	StudentID int64
+ }
  
+-func (Article) TableName() string { return "articles" }
+-
  type ArticleUsecase struct {
  	data *data.Data
+-	slog *slog.Logger
 +	// Embed a generic repo instance to demo gormrepo usage
 +	// In practice, this repo can replace repetitive CRUD code
 +	repo *gormrepo.Repo[models.Article, *models.ArticleColumns]
- 	log  *log.Helper
++	log  *slog.Logger
  }
  
- func NewArticleUsecase(data *data.Data, logger log.Logger) *ArticleUsecase {
--	return &ArticleUsecase{data: data, log: log.NewHelper(logger)}
+-func NewArticleUsecase(data *data.Data, logger *slog.Logger) (*ArticleUsecase, error) {
+-	// Migrate the owned table plus the mirrored students table (needed in the
+-	// existence check); both services share one database
+-	// 建好本服务拥有的 articles 表，外加镜像的 students 表（供存在性校验用）
+-	if err := data.DB().AutoMigrate(&Article{}, &Student{}); err != nil {
+-		return nil, err
++func NewArticleUsecase(data *data.Data, logger *slog.Logger) *ArticleUsecase {
 +	return &ArticleUsecase{
 +		data: data,
 +		repo: gormrepo.NewRepo(gormclass.Use(&models.Article{})),
-+		log:  log.NewHelper(logger),
-+	}
++		log:  logger,
+ 	}
+-	return &ArticleUsecase{data: data, slog: logger}, nil
  }
  
  func (uc *ArticleUsecase) CreateArticle(ctx context.Context, a *Article) (*Article, *ebzkratos.Ebz) {
  	must.Nice(a.Title)
+-	must.True(a.StudentID > 0)
  
--	var res Article
--	if err := gofakeit.Struct(&res); err != nil {
--		return nil, ebzkratos.New(pb.ErrorArticleCreateFailure("fake: %v", err))
+-	// Lock the student row and insert the article in one transaction: the FOR
+-	// SHARE lock blocks a concurrent DeleteStudent (which takes FOR UPDATE) from
+-	// removing this student before we commit, so we cannot end up with an article
+-	// pointing at a student that's being deleted.
+-	// 在一个事务里锁住学生行再插入文章：FOR SHARE 锁会挡住并发的 DeleteStudent
+-	// （它持 FOR UPDATE）在本事务提交前删除该学生，从而绝不会创建出指向
+-	// "正在被删除的学生"的文章
+-	res := &Article{Title: a.Title, Content: a.Content, StudentID: a.StudentID}
+-	err := uc.data.DB().WithContext(ctx).Transaction(func(db *gorm.DB) error {
+-		var student Student
+-		if err := db.Clauses(clause.Locking{Strength: clause.LockingStrengthShare}).First(&student, a.StudentID).Error; err != nil {
+-			return err
 +	db := uc.data.DB()
 +
 +	var article *models.Article
@@ -75,12 +128,19 @@ Code differences compared to source project.
 +	//   }
 +	if erk, err := gormkratos.Transaction(ctx, db, func(db *gorm.DB) *errors.Error {
 +		article = &models.Article{
-+			Title:   a.Title,
-+			Content: a.Content,
-+		}
++			Title:     a.Title,
++			Content:   a.Content,
++			StudentID: a.StudentID,
+ 		}
+-		return db.Create(res).Error
+-	})
+-	if err != nil {
+-		if errors.Is(err, gorm.ErrRecordNotFound) {
+-			return nil, ebzkratos.New(pb.ErrorBadParam("student %d does not exist", a.StudentID))
 +		if err := uc.repo.With(ctx, db).Create(article); err != nil {
 +			return errors.New(500, "DB_ERROR", err.Error())
-+		}
+ 		}
+-		return nil, ebzkratos.New(pb.ErrorArticleCreateFailure("create article: %v", err))
 +		return nil
 +	}); err != nil {
 +		if erk != nil {
@@ -88,21 +148,51 @@ Code differences compared to source project.
 +		}
 +		return nil, ebzkratos.New(pb.ErrorServerError("tx: %v", err))
  	}
--	return &res, nil
+-	uc.slog.InfoContext(ctx, "created article", "id", res.ID, "student_id", res.StudentID)
+-	return res, nil
 +	return &Article{
-+		ID:      int64(article.ID),
-+		Title:   article.Title,
-+		Content: article.Content,
++		ID:        int64(article.ID),
++		Title:     article.Title,
++		Content:   article.Content,
++		StudentID: article.StudentID,
 +	}, nil
  }
  
  func (uc *ArticleUsecase) UpdateArticle(ctx context.Context, a *Article) (*Article, *ebzkratos.Ebz) {
  	must.True(a.ID > 0)
  	must.Nice(a.Title)
+-	must.True(a.StudentID > 0)
  
--	var res Article
--	if err := gofakeit.Struct(&res); err != nil {
--		return nil, ebzkratos.New(pb.ErrorServerError("fake: %v", err))
+-	// Same transaction + FOR SHARE lock as CreateArticle: the (new) owning
+-	// student cannot be deleted while we re-point the article.
+-	// 与 CreateArticle 相同的事务 + FOR SHARE 锁：改文章归属期间，新归属的学生不会被并发删除
+-	res := &Article{ID: a.ID}
+-	var studentMissing, articleMissing bool
+-	err := uc.data.DB().WithContext(ctx).Transaction(func(db *gorm.DB) error {
+-		var student Student
+-		if err := db.Clauses(clause.Locking{Strength: clause.LockingStrengthShare}).First(&student, a.StudentID).Error; err != nil {
+-			if errors.Is(err, gorm.ErrRecordNotFound) {
+-				studentMissing = true
+-				return nil
+-			}
+-			return err
+-		}
+-		upd := db.Model(res).Updates(map[string]any{
+-			"title":      a.Title,
+-			"content":    a.Content,
+-			"student_id": a.StudentID,
+-		})
+-		if upd.Error != nil {
+-			return upd.Error
+-		}
+-		if upd.RowsAffected == 0 {
+-			articleMissing = true
+-			return nil
+-		}
+-		return db.First(res, a.ID).Error
+-	})
+-	if err != nil {
+-		return nil, ebzkratos.New(pb.ErrorDbError("update article: %v", err))
 +	db := uc.data.DB()
 +
 +	// Use gormrepo UpdatesM with type-safe column value map
@@ -113,7 +203,13 @@ Code differences compared to source project.
 +	}); err != nil {
 +		return nil, ebzkratos.New(pb.ErrorServerError("update: %v", err))
  	}
--	return &res, nil
+-	if studentMissing {
+-		return nil, ebzkratos.New(pb.ErrorBadParam("student %d does not exist", a.StudentID))
+-	}
+-	if articleMissing {
+-		return nil, ebzkratos.New(pb.ErrorArticleNotFound("article %d not found", a.ID))
+-	}
+-	return res, nil
 +
 +	return a, nil
  }
@@ -121,6 +217,9 @@ Code differences compared to source project.
  func (uc *ArticleUsecase) DeleteArticle(ctx context.Context, id int64) *ebzkratos.Ebz {
  	must.True(id > 0)
  
+-	del := uc.data.DB().WithContext(ctx).Delete(&Article{}, id)
+-	if del.Error != nil {
+-		return ebzkratos.New(pb.ErrorDbError("delete article: %v", del.Error))
 +	db := uc.data.DB()
 +
 +	// Use gormrepo DeleteW with type-safe where condition
@@ -128,16 +227,21 @@ Code differences compared to source project.
 +		return db.Where(cls.ID.Eq(uint(id)))
 +	}); err != nil {
 +		return ebzkratos.New(pb.ErrorServerError("delete: %v", err))
-+	}
+ 	}
+-	if del.RowsAffected == 0 {
+-		return ebzkratos.New(pb.ErrorArticleNotFound("article %d not found", id))
+-	}
+-	uc.slog.InfoContext(ctx, "deleted article", "id", id)
  	return nil
  }
  
  func (uc *ArticleUsecase) GetArticle(ctx context.Context, id int64) (*Article, *ebzkratos.Ebz) {
  	must.True(id > 0)
  
--	var res Article
--	if err := gofakeit.Struct(&res); err != nil {
--		return nil, ebzkratos.New(pb.ErrorServerError("fake: %v", err))
+-	res := &Article{}
+-	if err := uc.data.DB().WithContext(ctx).First(res, id).Error; err != nil {
+-		if errors.Is(err, gorm.ErrRecordNotFound) {
+-			return nil, ebzkratos.New(pb.ErrorArticleNotFound("article %d not found", id))
 +	db := uc.data.DB()
 +
 +	// Use gormrepo with type-safe column reference
@@ -148,74 +252,135 @@ Code differences compared to source project.
 +	if erb != nil {
 +		if erb.NotExist {
 +			return nil, ebzkratos.New(pb.ErrorServerError("not found: %v", erb.Cause))
-+		}
+ 		}
+-		return nil, ebzkratos.New(pb.ErrorDbError("get article: %v", err))
 +		return nil, ebzkratos.New(pb.ErrorServerError("db: %v", erb.Cause))
  	}
--	return &res, nil
+-	return res, nil
 +
 +	return &Article{
-+		ID:      int64(article.ID),
-+		Title:   article.Title,
-+		Content: article.Content,
++		ID:        int64(article.ID),
++		Title:     article.Title,
++		Content:   article.Content,
++		StudentID: article.StudentID,
 +	}, nil
  }
  
  func (uc *ArticleUsecase) ListArticles(ctx context.Context, page int32, pageSize int32) ([]*Article, int32, *ebzkratos.Ebz) {
--	var items []*Article
--	gofakeit.Slice(&items)
+-	if page < 1 {
+-		page = 1
+-	}
+-	if pageSize < 1 {
+-		pageSize = 10
+-	}
 +	db := uc.data.DB()
-+
+ 
+-	db := uc.data.DB().WithContext(ctx)
+-
+-	var total int64
+-	if err := db.Model(&Article{}).Count(&total).Error; err != nil {
+-		return nil, 0, ebzkratos.New(pb.ErrorDbError("count articles: %v", err))
 +	// Use gormrepo Find to get all records from database
 +	articles, err := uc.repo.With(ctx, db).Find(func(db *gorm.DB, cls *models.ArticleColumns) *gorm.DB {
 +		return db.Order(cls.ID.Ob("DESC").Ox())
 +	})
 +	if err != nil {
 +		return nil, 0, ebzkratos.New(pb.ErrorServerError("list: %v", err))
-+	}
-+
+ 	}
+ 
+-	var items []*Article
+-	if err := db.Order("id").Offset(int((page - 1) * pageSize)).Limit(int(pageSize)).Find(&items).Error; err != nil {
+-		return nil, 0, ebzkratos.New(pb.ErrorDbError("list articles: %v", err))
 +	items := make([]*Article, 0, len(articles))
 +	for _, v := range articles {
 +		items = append(items, &Article{
-+			ID:      int64(v.ID),
-+			Title:   v.Title,
-+			Content: v.Content,
++			ID:        int64(v.ID),
++			Title:     v.Title,
++			Content:   v.Content,
++			StudentID: v.StudentID,
 +		})
-+	}
- 	return items, int32(len(items)), nil
+ 	}
+-	return items, int32(total), nil
++	return items, int32(len(items)), nil
+ }
+ 
+-// ListStudentArticles returns one student's articles, one page at a time. The
+-// student↔article relationship gets its own endpoint instead of overloading
+-// ListArticles with an extra flag.
+-//
+-// ListStudentArticles 分页返回某个学生的文章。学生↔文章这层关系单独开一个接口，
+-// 而不是往 ListArticles 上塞过滤参数。
+ func (uc *ArticleUsecase) ListStudentArticles(ctx context.Context, studentID int64, page int32, pageSize int32) ([]*Article, int32, *ebzkratos.Ebz) {
+ 	must.True(studentID > 0)
+-	if page < 1 {
+-		page = 1
+-	}
+-	if pageSize < 1 {
+-		pageSize = 10
+-	}
+ 
+-	db := uc.data.DB().WithContext(ctx)
++	db := uc.data.DB()
+ 
+-	var total int64
+-	if err := db.Model(&Article{}).Where("student_id = ?", studentID).Count(&total).Error; err != nil {
+-		return nil, 0, ebzkratos.New(pb.ErrorDbError("count student articles: %v", err))
++	// Use gormrepo Find with a type-safe student_id filter to demo relational queries
++	// 用 gormrepo Find 加类型安全的 student_id 过滤，演示关联查询
++	articles, err := uc.repo.With(ctx, db).Find(func(db *gorm.DB, cls *models.ArticleColumns) *gorm.DB {
++		return db.Where(cls.StudentID.Eq(studentID)).Order(cls.ID.Ob("DESC").Ox())
++	})
++	if err != nil {
++		return nil, 0, ebzkratos.New(pb.ErrorServerError("list student articles: %v", err))
+ 	}
+ 
+-	var items []*Article
+-	if err := db.Where("student_id = ?", studentID).Order("id").Offset(int((page - 1) * pageSize)).Limit(int(pageSize)).Find(&items).Error; err != nil {
+-		return nil, 0, ebzkratos.New(pb.ErrorDbError("list student articles: %v", err))
++	items := make([]*Article, 0, len(articles))
++	for _, v := range articles {
++		items = append(items, &Article{
++			ID:        int64(v.ID),
++			Title:     v.Title,
++			Content:   v.Content,
++			StudentID: v.StudentID,
++		})
+ 	}
+-	return items, int32(total), nil
++	return items, int32(len(items)), nil
  }
 ```
 
-## internal/data/data.go (+14 -3)
+## internal/data/data.go (+9 -8)
 
 ```diff
-@@ -4,10 +4,12 @@
- 	"github.com/go-kratos/kratos/v2/log"
+@@ -5,6 +5,7 @@
+ 
  	"github.com/google/wire"
  	"github.com/yylego/kratos-examples/demo2kratos/internal/conf"
 +	"github.com/yylego/kratos-examples/demo2kratos/internal/pkg/models"
  	"github.com/yylego/must"
  	"github.com/yylego/rese"
- 	"gorm.io/driver/sqlite"
- 	"gorm.io/gorm"
-+	loggergorm "gorm.io/gorm/logger"
- )
- 
- var ProviderSet = wire.NewSet(NewData)
-@@ -17,11 +19,20 @@
+ 	"gorm.io/driver/postgres"
+@@ -17,19 +18,19 @@
+ 	db *gorm.DB
  }
  
- func NewData(c *conf.Data, logger log.Logger) (*Data, func(), error) {
--	must.Same(c.Database.Driver, "sqlite3")
--	db := rese.P1(gorm.Open(sqlite.Open(c.Database.Source), &gorm.Config{}))
-+	dsn := must.Nice(c.Database.Source)
-+	db := rese.P1(gorm.Open(sqlite.Open(dsn), &gorm.Config{
-+		Logger: loggergorm.Default.LogMode(loggergorm.Info),
-+	}))
+-// DB exposes the underlying gorm handle so the biz code can run true queries.
+-//
+-// DB 暴露底层 gorm 句柄，供 biz 层执行真实的数据库读写
+-func (d *Data) DB() *gorm.DB {
+-	return d.db
+-}
+-
+ func NewData(c *conf.Data, logger *slog.Logger) (*Data, func(), error) {
+ 	must.Same(c.Database.Driver, "postgres")
+ 	db := rese.P1(gorm.Open(postgres.Open(c.Database.Source), &gorm.Config{}))
 +
 +	must.Done(db.AutoMigrate(&models.Article{}))
 +
  	cleanup := func() {
- 		log.NewHelper(logger).Info("closing the data resources")
+ 		logger.Info("closing the data resources")
 -		_ = rese.P1(db.DB()).Close()
 +		must.Done(rese.P1(db.DB()).Close())
  	}
@@ -227,18 +392,19 @@ Code differences compared to source project.
  }
 ```
 
-## internal/pkg/models/article.go (+13 -0)
+## internal/pkg/models/article.go (+14 -0)
 
 ```diff
-@@ -0,0 +1,13 @@
+@@ -0,0 +1,14 @@
 +package models
 +
 +import "gorm.io/gorm"
 +
 +type Article struct {
 +	gorm.Model
-+	Title   string `gorm:"type:varchar(255)"`
-+	Content string `gorm:"type:text"`
++	Title     string `gorm:"type:varchar(255)"`
++	Content   string `gorm:"type:text"`
++	StudentID int64  `gorm:"index"`
 +}
 +
 +func (*Article) TableName() string {
@@ -246,10 +412,10 @@ Code differences compared to source project.
 +}
 ```
 
-## internal/pkg/models/gormcnm.gen.go (+43 -0)
+## internal/pkg/models/gormcnm.gen.go (+45 -0)
 
 ```diff
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,45 @@
 +// Code generated using gormcngen. DO NOT EDIT.
 +// This file was auto generated via github.com/yylego/gormcngen
 +
@@ -279,6 +445,7 @@ Code differences compared to source project.
 +		DeletedAt: gormcnm.Cnm(c.DeletedAt, "deleted_at"),
 +		Title:     gormcnm.Cnm(c.Title, "title"),
 +		Content:   gormcnm.Cnm(c.Content, "content"),
++		StudentID: gormcnm.Cnm(c.StudentID, "student_id"),
 +	}
 +}
 +
@@ -292,6 +459,7 @@ Code differences compared to source project.
 +	DeletedAt gormcnm.ColumnName[gorm.DeletedAt]
 +	Title     gormcnm.ColumnName[string]
 +	Content   gormcnm.ColumnName[string]
++	StudentID gormcnm.ColumnName[int64]
 +}
 ```
 

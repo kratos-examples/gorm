@@ -2,9 +2,9 @@ package biz
 
 import (
 	"context"
+	"log/slog"
 
-	"github.com/go-kratos/kratos/v2/errors"
-	"github.com/go-kratos/kratos/v2/log"
+	"github.com/go-kratos/kratos/v3/errors"
 	"github.com/yylego/gormcnm"
 	"github.com/yylego/gormrepo"
 	"github.com/yylego/gormrepo/gormclass"
@@ -29,14 +29,14 @@ type StudentUsecase struct {
 	// Embed a generic repo instance to demo gormrepo usage
 	// In practice, this repo can replace repetitive CRUD code
 	repo *gormrepo.Repo[models.Student, *models.StudentColumns]
-	log  *log.Helper
+	log  *slog.Logger
 }
 
-func NewStudentUsecase(data *data.Data, logger log.Logger) *StudentUsecase {
+func NewStudentUsecase(data *data.Data, logger *slog.Logger) *StudentUsecase {
 	return &StudentUsecase{
 		data: data,
 		repo: gormrepo.NewRepo(gormclass.Use(&models.Student{})),
-		log:  log.NewHelper(logger),
+		log:  logger,
 	}
 }
 

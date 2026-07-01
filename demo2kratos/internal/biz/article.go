@@ -2,9 +2,9 @@ package biz
 
 import (
 	"context"
+	"log/slog"
 
-	"github.com/go-kratos/kratos/v2/errors"
-	"github.com/go-kratos/kratos/v2/log"
+	"github.com/go-kratos/kratos/v3/errors"
 	"github.com/yylego/gormcnm"
 	"github.com/yylego/gormrepo"
 	"github.com/yylego/gormrepo/gormclass"
@@ -29,14 +29,14 @@ type ArticleUsecase struct {
 	// Embed a generic repo instance to demo gormrepo usage
 	// In practice, this repo can replace repetitive CRUD code
 	repo *gormrepo.Repo[models.Article, *models.ArticleColumns]
-	log  *log.Helper
+	log  *slog.Logger
 }
 
-func NewArticleUsecase(data *data.Data, logger log.Logger) *ArticleUsecase {
+func NewArticleUsecase(data *data.Data, logger *slog.Logger) *ArticleUsecase {
 	return &ArticleUsecase{
 		data: data,
 		repo: gormrepo.NewRepo(gormclass.Use(&models.Article{})),
-		log:  log.NewHelper(logger),
+		log:  logger,
 	}
 }
 
@@ -68,8 +68,9 @@ func (uc *ArticleUsecase) CreateArticle(ctx context.Context, a *Article) (*Artic
 	//   }
 	if erk, err := gormkratos.Transaction(ctx, db, func(db *gorm.DB) *errors.Error {
 		article = &models.Article{
-			Title:   a.Title,
-			Content: a.Content,
+			Title:     a.Title,
+			Content:   a.Content,
+			StudentID: a.StudentID,
 		}
 		if err := uc.repo.With(ctx, db).Create(article); err != nil {
 			return errors.New(500, "DB_ERROR", err.Error())
@@ -82,9 +83,10 @@ func (uc *ArticleUsecase) CreateArticle(ctx context.Context, a *Article) (*Artic
 		return nil, ebzkratos.New(pb.ErrorServerError("tx: %v", err))
 	}
 	return &Article{
-		ID:      int64(article.ID),
-		Title:   article.Title,
-		Content: article.Content,
+		ID:        int64(article.ID),
+		Title:     article.Title,
+		Content:   article.Content,
+		StudentID: article.StudentID,
 	}, nil
 }
 
@@ -138,9 +140,10 @@ func (uc *ArticleUsecase) GetArticle(ctx context.Context, id int64) (*Article, *
 	}
 
 	return &Article{
-		ID:      int64(article.ID),
-		Title:   article.Title,
-		Content: article.Content,
+		ID:        int64(article.ID),
+		Title:     article.Title,
+		Content:   article.Content,
+		StudentID: article.StudentID,
 	}, nil
 }
 
@@ -158,9 +161,36 @@ func (uc *ArticleUsecase) ListArticles(ctx context.Context, page int32, pageSize
 	items := make([]*Article, 0, len(articles))
 	for _, v := range articles {
 		items = append(items, &Article{
-			ID:      int64(v.ID),
-			Title:   v.Title,
-			Content: v.Content,
+			ID:        int64(v.ID),
+			Title:     v.Title,
+			Content:   v.Content,
+			StudentID: v.StudentID,
+		})
+	}
+	return items, int32(len(items)), nil
+}
+
+func (uc *ArticleUsecase) ListStudentArticles(ctx context.Context, studentID int64, page int32, pageSize int32) ([]*Article, int32, *ebzkratos.Ebz) {
+	must.True(studentID > 0)
+
+	db := uc.data.DB()
+
+	// Use gormrepo Find with a type-safe student_id filter to demo relational queries
+	// 用 gormrepo Find 加类型安全的 student_id 过滤，演示关联查询
+	articles, err := uc.repo.With(ctx, db).Find(func(db *gorm.DB, cls *models.ArticleColumns) *gorm.DB {
+		return db.Where(cls.StudentID.Eq(studentID)).Order(cls.ID.Ob("DESC").Ox())
+	})
+	if err != nil {
+		return nil, 0, ebzkratos.New(pb.ErrorServerError("list student articles: %v", err))
+	}
+
+	items := make([]*Article, 0, len(articles))
+	for _, v := range articles {
+		items = append(items, &Article{
+			ID:        int64(v.ID),
+			Title:     v.Title,
+			Content:   v.Content,
+			StudentID: v.StudentID,
 		})
 	}
 	return items, int32(len(items)), nil

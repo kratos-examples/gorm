@@ -27,6 +27,7 @@ func (c *Article) Columns() *ArticleColumns {
 		DeletedAt: gormcnm.Cnm(c.DeletedAt, "deleted_at"),
 		Title:     gormcnm.Cnm(c.Title, "title"),
 		Content:   gormcnm.Cnm(c.Content, "content"),
+		StudentID: gormcnm.Cnm(c.StudentID, "student_id"),
 	}
 }
 
@@ -40,4 +41,5 @@ type ArticleColumns struct {
 	DeletedAt gormcnm.ColumnName[gorm.DeletedAt]
 	Title     gormcnm.ColumnName[string]
 	Content   gormcnm.ColumnName[string]
+	StudentID gormcnm.ColumnName[int64]
 }
