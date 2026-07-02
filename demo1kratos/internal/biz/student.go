@@ -142,12 +142,31 @@ func (uc *StudentUsecase) GetStudent(ctx context.Context, id int64) (*Student, *
 }
 
 func (uc *StudentUsecase) ListStudents(ctx context.Context, page int32, pageSize int32) ([]*Student, int32, *ebzkratos.Ebz) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 10
+	}
+
 	db := uc.data.DB()
 
-	// Use gormrepo Find to get all records from database
-	students, err := uc.repo.With(ctx, db).Find(func(db *gorm.DB, cls *models.StudentColumns) *gorm.DB {
-		return db.Order(cls.ID.Ob("DESC").Ox())
-	})
+	// gormrepo FindPageAndCount replaces the stump's hand-written Count + Order + Offset + Limit
+	// with one typed call that returns the current page plus the total row count together.
+	// gormrepo 的 FindPageAndCount 把桩子里手写的 Count + Order + Offset + Limit
+	// 收敛成一个类型安全的调用：一次拿到当页数据和总行数
+	students, total, err := uc.repo.With(ctx, db).FindPageAndCount(
+		func(db *gorm.DB, cls *models.StudentColumns) *gorm.DB {
+			return db
+		},
+		func(cls *models.StudentColumns) gormcnm.OrderByBottle {
+			return cls.ID.Ob("asc")
+		},
+		&gormrepo.Pagination{
+			Offset: int((page - 1) * pageSize),
+			Limit:  int(pageSize),
+		},
+	)
 	if err != nil {
 		return nil, 0, ebzkratos.New(pb.ErrorServerError("list: %v", err))
 	}
@@ -159,5 +178,5 @@ func (uc *StudentUsecase) ListStudents(ctx context.Context, page int32, pageSize
 			Name: v.Name,
 		})
 	}
-	return items, int32(len(items)), nil
+	return items, int32(total), nil
 }
