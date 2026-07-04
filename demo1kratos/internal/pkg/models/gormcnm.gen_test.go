@@ -22,6 +22,7 @@ func TestGenerateColumns(t *testing.T) {
 	// Define data objects used in column generation - supports both instance and non-instance types
 	objects := []any{
 		&models.Student{},
+		&models.Article{},
 	}
 
 	// Configure generation options with latest best practices

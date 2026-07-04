@@ -15,6 +15,7 @@ import (
 	"github.com/yylego/kratos-gorm/gormkratos"
 	"github.com/yylego/must"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type Student struct {
@@ -26,17 +27,19 @@ type Student struct {
 
 type StudentUsecase struct {
 	data *data.Data
-	// Embed a generic repo instance to demo gormrepo usage
-	// In practice, this repo can replace repetitive CRUD code
 	repo *gormrepo.Repo[models.Student, *models.StudentColumns]
-	log  *slog.Logger
+	// The mirrored article repo backs the cascade delete; the two services share one database.
+	// 镜像的文章 repo 用于级联删除；两个服务共用一个库。
+	repoArticle *gormrepo.Repo[models.Article, *models.ArticleColumns]
+	log         *slog.Logger
 }
 
 func NewStudentUsecase(data *data.Data, logger *slog.Logger) *StudentUsecase {
 	return &StudentUsecase{
-		data: data,
-		repo: gormrepo.NewRepo(gormclass.Use(&models.Student{})),
-		log:  logger,
+		data:        data,
+		repo:        gormrepo.NewRepo(gormclass.Use(&models.Student{})),
+		repoArticle: gormrepo.NewRepo(gormclass.Use(&models.Article{})),
+		log:         logger,
 	}
 }
 
@@ -46,43 +49,27 @@ func (uc *StudentUsecase) CreateStudent(ctx context.Context, s *Student) (*Stude
 	db := uc.data.DB()
 
 	var student *models.Student
-
-	// This demonstrates how to handle database transactions in Kratos framework
-	//
-	// IMPORTANT: Two-Errors Return Pattern
-	// The gormkratos.Transaction function returns two errors:
-	// - erk: Business logic errors (Kratos framework errors)
-	// - err: Database transaction errors
-	//
-	// When erk != nil, err is always != nil (business error triggers transaction rollback).
-	// So check err first as the main condition, then check erk inside.
-	// When erk != nil, it contains the specific business reason.
-	// Return erk first since it has more business context (reason and code) than what the raw transaction throws.
-	//
-	// Recommended usage pattern (MUST follow):
-	//   if erk, err := gormkratos.Transaction(...); err != nil {
-	//       if erk != nil {
-	//           return erk  // Business error caused rollback
-	//       }
-	//       return WrapTxError(err)  // Database commit failed
-	//   }
 	if erk, err := gormkratos.Transaction(ctx, db, func(db *gorm.DB) *errors.Error {
 		student = &models.Student{
-			Name: s.Name,
+			Name:      s.Name,
+			Age:       s.Age,
+			ClassName: s.ClassName,
 		}
 		if err := uc.repo.With(ctx, db).Create(student); err != nil {
-			return errors.New(500, "DB_ERROR", err.Error())
+			return pb.ErrorStudentCreateFailure("create student: %v", err)
 		}
 		return nil
 	}); err != nil {
 		if erk != nil {
 			return nil, ebzkratos.New(erk)
 		}
-		return nil, ebzkratos.New(pb.ErrorServerError("tx: %v", err))
+		return nil, ebzkratos.New(pb.ErrorTxError("tx: %v", err))
 	}
 	return &Student{
-		ID:   int64(student.ID),
-		Name: student.Name,
+		ID:        int64(student.ID),
+		Name:      student.Name,
+		Age:       student.Age,
+		ClassName: student.ClassName,
 	}, nil
 }
 
@@ -92,13 +79,23 @@ func (uc *StudentUsecase) UpdateStudent(ctx context.Context, s *Student) (*Stude
 
 	db := uc.data.DB()
 
-	// Use gormrepo UpdatesM with type-safe column value map
+	// Confirm the student exists first, matching the stump: a missing row yields StudentNotFound.
+	// 先确认学生存在，对齐桩子：查不到返回 StudentNotFound 而非静默成功。
+	if _, erb := uc.repo.With(ctx, db).FirstE(func(db *gorm.DB, cls *models.StudentColumns) *gorm.DB {
+		return db.Where(cls.ID.Eq(uint(s.ID)))
+	}); erb != nil {
+		if erb.NotExist {
+			return nil, ebzkratos.New(pb.ErrorStudentNotFound("student %d not found", s.ID))
+		}
+		return nil, ebzkratos.New(pb.ErrorDbError("get student: %v", erb.Cause))
+	}
+
 	if err := uc.repo.With(ctx, db).UpdatesM(func(db *gorm.DB, cls *models.StudentColumns) *gorm.DB {
 		return db.Where(cls.ID.Eq(uint(s.ID)))
 	}, func(cls *models.StudentColumns) gormcnm.ColumnValueMap {
-		return cls.Kw(cls.Name.Kv(s.Name))
+		return cls.Kw(cls.Name.Kv(s.Name)).Kw(cls.Age.Kv(s.Age)).Kw(cls.ClassName.Kv(s.ClassName))
 	}); err != nil {
-		return nil, ebzkratos.New(pb.ErrorServerError("update: %v", err))
+		return nil, ebzkratos.New(pb.ErrorDbError("update student: %v", err))
 	}
 
 	return s, nil
@@ -109,11 +106,41 @@ func (uc *StudentUsecase) DeleteStudent(ctx context.Context, id int64) *ebzkrato
 
 	db := uc.data.DB()
 
-	// Use gormrepo DeleteW with type-safe where condition
-	if err := uc.repo.With(ctx, db).DeleteW(func(db *gorm.DB, cls *models.StudentColumns) *gorm.DB {
-		return db.Where(cls.ID.Eq(uint(id)))
+	// Translate the stump's atomic cascade delete, in one transaction:
+	//   ① FOR UPDATE lock the student row (a concurrent CreateArticle holds FOR SHARE, so the two serialize);
+	//   ② delete the student's articles (children first);
+	//   ③ delete the student (parent last).
+	// 翻译桩子的原子级联删除，全在一个事务里：①FOR UPDATE 锁学生行 ②先删文章 ③再删学生。
+	var notFound bool
+	if erk, err := gormkratos.Transaction(ctx, db, func(db *gorm.DB) *errors.Error {
+		if _, erb := uc.repo.With(ctx, db).FirstE(func(db *gorm.DB, cls *models.StudentColumns) *gorm.DB {
+			return db.Clauses(clause.Locking{Strength: clause.LockingStrengthUpdate}).Where(cls.ID.Eq(uint(id)))
+		}); erb != nil {
+			if erb.NotExist {
+				notFound = true
+				return nil
+			}
+			return pb.ErrorDbError("get student: %v", erb.Cause)
+		}
+		if err := uc.repoArticle.With(ctx, db).DeleteW(func(db *gorm.DB, cls *models.ArticleColumns) *gorm.DB {
+			return db.Where(cls.StudentID.Eq(id))
+		}); err != nil {
+			return pb.ErrorDbError("delete articles: %v", err)
+		}
+		if err := uc.repo.With(ctx, db).DeleteW(func(db *gorm.DB, cls *models.StudentColumns) *gorm.DB {
+			return db.Where(cls.ID.Eq(uint(id)))
+		}); err != nil {
+			return pb.ErrorDbError("delete student: %v", err)
+		}
+		return nil
 	}); err != nil {
-		return ebzkratos.New(pb.ErrorServerError("delete: %v", err))
+		if erk != nil {
+			return ebzkratos.New(erk)
+		}
+		return ebzkratos.New(pb.ErrorTxError("delete student with articles: %v", err))
+	}
+	if notFound {
+		return ebzkratos.New(pb.ErrorStudentNotFound("student %d not found", id))
 	}
 	return nil
 }
@@ -123,21 +150,21 @@ func (uc *StudentUsecase) GetStudent(ctx context.Context, id int64) (*Student, *
 
 	db := uc.data.DB()
 
-	// Use gormrepo with type-safe column reference
-	// The cls param provides compile-time safe column access
 	student, erb := uc.repo.With(ctx, db).FirstE(func(db *gorm.DB, cls *models.StudentColumns) *gorm.DB {
 		return db.Where(cls.ID.Eq(uint(id)))
 	})
 	if erb != nil {
 		if erb.NotExist {
-			return nil, ebzkratos.New(pb.ErrorServerError("not found: %v", erb.Cause))
+			return nil, ebzkratos.New(pb.ErrorStudentNotFound("student %d not found", id))
 		}
-		return nil, ebzkratos.New(pb.ErrorServerError("db: %v", erb.Cause))
+		return nil, ebzkratos.New(pb.ErrorDbError("get student: %v", erb.Cause))
 	}
 
 	return &Student{
-		ID:   int64(student.ID),
-		Name: student.Name,
+		ID:        int64(student.ID),
+		Name:      student.Name,
+		Age:       student.Age,
+		ClassName: student.ClassName,
 	}, nil
 }
 
@@ -151,10 +178,9 @@ func (uc *StudentUsecase) ListStudents(ctx context.Context, page int32, pageSize
 
 	db := uc.data.DB()
 
-	// gormrepo FindPageAndCount replaces the stump's hand-written Count + Order + Offset + Limit
-	// with one typed call that returns the current page plus the total row count together.
-	// gormrepo 的 FindPageAndCount 把桩子里手写的 Count + Order + Offset + Limit
-	// 收敛成一个类型安全的调用：一次拿到当页数据和总行数
+	// gormrepo FindPageAndCount returns the page and the row count in one shot,
+	// replacing the stump's hand-written Count + order + offset + limit.
+	// gormrepo 的 FindPageAndCount 一次拿到当页数据和总行数。
 	students, total, err := uc.repo.With(ctx, db).FindPageAndCount(
 		func(db *gorm.DB, cls *models.StudentColumns) *gorm.DB {
 			return db
@@ -168,14 +194,16 @@ func (uc *StudentUsecase) ListStudents(ctx context.Context, page int32, pageSize
 		},
 	)
 	if err != nil {
-		return nil, 0, ebzkratos.New(pb.ErrorServerError("list: %v", err))
+		return nil, 0, ebzkratos.New(pb.ErrorDbError("list students: %v", err))
 	}
 
 	items := make([]*Student, 0, len(students))
 	for _, v := range students {
 		items = append(items, &Student{
-			ID:   int64(v.ID),
-			Name: v.Name,
+			ID:        int64(v.ID),
+			Name:      v.Name,
+			Age:       v.Age,
+			ClassName: v.ClassName,
 		})
 	}
 	return items, int32(total), nil
