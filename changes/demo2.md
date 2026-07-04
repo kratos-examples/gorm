@@ -148,7 +148,7 @@ Code differences compared to source project.
  }
  
  func (uc *ArticleUsecase) UpdateArticle(ctx context.Context, a *Article) (*Article, *ebzkratos.Ebz) {
-@@ -77,71 +86,87 @@
+@@ -77,112 +86,153 @@
  	must.Nice(a.Title)
  	must.True(a.StudentID > 0)
  
@@ -280,15 +280,14 @@ Code differences compared to source project.
  }
  
  func (uc *ArticleUsecase) ListArticles(ctx context.Context, page int32, pageSize int32) ([]*Article, int32, *ebzkratos.Ebz) {
-@@ -152,26 +177,31 @@
- 		pageSize = 10
- 	}
+ 	must.True(page >= 1)
+ 	must.True(pageSize >= 1)
  
 -	db := uc.data.DB().WithContext(ctx)
 +	db := uc.data.DB()
  
--	var total int64
--	if err := db.Model(&Article{}).Count(&total).Error; err != nil {
+-	var count int64
+-	if err := db.Model(&Article{}).Count(&count).Error; err != nil {
 -		return nil, 0, ebzkratos.New(pb.ErrorDbError("count articles: %v", err))
 -	}
 -
@@ -309,7 +308,7 @@ Code differences compared to source project.
 +	if err != nil {
  		return nil, 0, ebzkratos.New(pb.ErrorDbError("list articles: %v", err))
  	}
--	return items, int32(total), nil
+-	return items, int32(count), nil
 +
 +	return toArticleItems(articles), int32(total), nil
  }
@@ -324,16 +323,14 @@ Code differences compared to source project.
 +// ListStudentArticles 分页返回某个学生的文章，关系单独开一个接口。
  func (uc *ArticleUsecase) ListStudentArticles(ctx context.Context, studentID int64, page int32, pageSize int32) ([]*Article, int32, *ebzkratos.Ebz) {
  	must.True(studentID > 0)
- 	if page < 1 {
-@@ -181,16 +211,36 @@
- 		pageSize = 10
- 	}
+ 	must.True(page >= 1)
+ 	must.True(pageSize >= 1)
  
 -	db := uc.data.DB().WithContext(ctx)
 +	db := uc.data.DB()
  
--	var total int64
--	if err := db.Model(&Article{}).Where("student_id = ?", studentID).Count(&total).Error; err != nil {
+-	var count int64
+-	if err := db.Model(&Article{}).Where("student_id = ?", studentID).Count(&count).Error; err != nil {
 -		return nil, 0, ebzkratos.New(pb.ErrorDbError("count student articles: %v", err))
 +	articles, total, err := uc.repo.With(ctx, db).FindPageAndCount(
 +		func(db *gorm.DB, cls *models.ArticleColumns) *gorm.DB {
@@ -367,7 +364,7 @@ Code differences compared to source project.
 +			StudentID: v.StudentID,
 +		})
  	}
--	return items, int32(total), nil
+-	return items, int32(count), nil
 +	return items
  }
 ```

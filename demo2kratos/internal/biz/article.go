@@ -170,12 +170,8 @@ func (uc *ArticleUsecase) GetArticle(ctx context.Context, id int64) (*Article, *
 }
 
 func (uc *ArticleUsecase) ListArticles(ctx context.Context, page int32, pageSize int32) ([]*Article, int32, *ebzkratos.Ebz) {
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 10
-	}
+	must.True(page >= 1)
+	must.True(pageSize >= 1)
 
 	db := uc.data.DB()
 
@@ -204,12 +200,8 @@ func (uc *ArticleUsecase) ListArticles(ctx context.Context, page int32, pageSize
 // ListStudentArticles 分页返回某个学生的文章，关系单独开一个接口。
 func (uc *ArticleUsecase) ListStudentArticles(ctx context.Context, studentID int64, page int32, pageSize int32) ([]*Article, int32, *ebzkratos.Ebz) {
 	must.True(studentID > 0)
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 10
-	}
+	must.True(page >= 1)
+	must.True(pageSize >= 1)
 
 	db := uc.data.DB()
 

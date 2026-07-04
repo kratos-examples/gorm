@@ -20,10 +20,10 @@ Code differences compared to source project.
  	httpServer := server.NewHTTPServer(confServer, studentService, logger)
 ```
 
-## internal/biz/student.go (+132 -75)
+## internal/biz/student.go (+133 -76)
 
 ```diff
-@@ -2,132 +2,170 @@
+@@ -2,148 +2,205 @@
  
  import (
  	"context"
@@ -262,15 +262,14 @@ Code differences compared to source project.
  }
  
  func (uc *StudentUsecase) ListStudents(ctx context.Context, page int32, pageSize int32) ([]*Student, int32, *ebzkratos.Ebz) {
-@@ -138,16 +176,35 @@
- 		pageSize = 10
- 	}
+ 	must.True(page >= 1)
+ 	must.True(pageSize >= 1)
  
 -	db := uc.data.DB().WithContext(ctx)
 +	db := uc.data.DB()
  
--	var total int64
--	if err := db.Model(&Student{}).Count(&total).Error; err != nil {
+-	var count int64
+-	if err := db.Model(&Student{}).Count(&count).Error; err != nil {
 -		return nil, 0, ebzkratos.New(pb.ErrorDbError("count students: %v", err))
 +	// gormrepo FindPageAndCount returns the page and the row count in one shot,
 +	// replacing the stump's hand-written Count + order + offset + limit.
@@ -303,7 +302,8 @@ Code differences compared to source project.
 +			ClassName: v.ClassName,
 +		})
  	}
- 	return items, int32(total), nil
+-	return items, int32(count), nil
++	return items, int32(total), nil
  }
 ```
 
